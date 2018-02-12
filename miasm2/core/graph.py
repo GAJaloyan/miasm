@@ -204,7 +204,7 @@ class DiGraph(object):
         nodes_attr = {'shape': 'Mrecord',
                       'fontname': 'Courier New'}
 
-        out = ["digraph asm_graph {\nsplines=ortho"]
+        out = ["digraph asm_graph {"]
 
         # Generate basic nodes
         out_nodes = []

@@ -401,9 +401,7 @@ class DiGraphIR(DiGraph):
         yield self.DotCellDescription(text=str(node.name),
                                       attr={'align': 'center',
                                             'colspan': 2,
-                                            'id' : str(node.name),
-                                            'bgcolor': 'grey',
-                                            'href': "#a_" + str(node.name)})
+                                            'bgcolor': 'grey'})
         if node not in self._blocks:
             yield [self.DotCellDescription(text="NOT PRESENT", attr={})]
             raise StopIteration
@@ -422,10 +420,6 @@ class DiGraphIR(DiGraph):
             return {}
         src_irdst = self._blocks[src].dst
         edge_color = "blue"
-        constraint = "true"
-        if src.offset is not None and dst.offset is not None:
-            if (src.offset > dst.offset):
-                constraint="false"
         if isinstance(src_irdst, m2_expr.ExprCond):
             if (expr_is_label(src_irdst.src1) and
                     src_irdst.src1.name == dst):
@@ -433,7 +427,7 @@ class DiGraphIR(DiGraph):
             elif (expr_is_label(src_irdst.src2) and
                   src_irdst.src2.name == dst):
                 edge_color = "red"
-        return {"color": edge_color, "constraint": constraint}
+        return {"color": edge_color}
 
     def node_attr(self, node):
         if node not in self._blocks:
