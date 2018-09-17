@@ -9,5 +9,10 @@ try:
 except ImportError:
     # Nothing to do, z3 not available
     pass
+try:
+    import miasm2.ir.translators.z3_mem
+except ImportError:
+    # Nothing to do, z3m not available
+    pass
 
 __all__ = ["Translator"]
