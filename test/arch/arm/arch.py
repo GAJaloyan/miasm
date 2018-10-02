@@ -431,6 +431,9 @@ reg_tests_armt = [
     ("00000000    BLX        R7",
      "B847"),
 
+    ("00000000    BLX        R8",
+     "C047"),
+
     ("00000000    CBZ        R4, 0x2E",
      "bcb1"),
     ("00000000    CBNZ       R0, 0x2A",
@@ -666,6 +669,9 @@ reg_tests_armt = [
 
     ("xxxxxxxx    EOR        R3, R3, R1",
      "83EA0103"),
+
+    ("xxxxxxxx    EOR        R0, R1, 0x42",
+     "81F04200"),
 
     ("xxxxxxxx    DSB        SY",
      "bff34f8f"),

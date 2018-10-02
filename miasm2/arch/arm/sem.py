@@ -283,7 +283,8 @@ def rsb(ir, instr, a, b, c=None):
     e = []
     if c is None:
         b, c = a, b
-    r = c - b
+    arg1, arg2 = c, b
+    r = arg1 - arg2
     e.append(ExprAff(a, r))
     dst = get_dst(a)
     if dst is not None:
@@ -297,10 +298,8 @@ def rsbs(ir, instr, a, b, c=None):
         b, c = a, b
     arg1, arg2 = c, b
     r = arg1 - arg2
-
     e += update_flag_arith_sub_zn(arg1, arg2)
     e += update_flag_arith_sub_co(arg1, arg2)
-
     e.append(ExprAff(a, r))
     dst = get_dst(a)
     if dst is not None:
@@ -398,11 +397,8 @@ def l_cmp(ir, instr, a, b, c=None):
     if c is None:
         b, c = a, b
     arg1, arg2 = b, c
-    r = b - c
-
     e += update_flag_arith_sub_zn(arg1, arg2)
     e += update_flag_arith_sub_co(arg1, arg2)
-
     return e, []
 
 
@@ -411,11 +407,8 @@ def cmn(ir, instr, a, b, c=None):
     if c is None:
         b, c = a, b
     arg1, arg2 = b, c
-    r = b + c
-
     e += update_flag_arith_add_zn(arg1, arg2)
     e += update_flag_arith_add_co(arg1, arg2)
-
     return e, []
 
 
@@ -448,7 +441,7 @@ def orrs(ir, instr, a, b, c=None):
     if c is None:
         b, c = a, b
     arg1, arg2 = b, c
-    r = b | c
+    r = arg1 | arg2
 
     e += [ExprAff(zf, ExprOp('FLAG_EQ', r))]
     e += update_flag_nf(r)
@@ -525,7 +518,7 @@ def mrs(ir, instr, a, b):
         out.append(nf)
         e.append(ExprAff(a, ExprCompose(*out)))
     else:
-        raise NotImplementedError("MSR not implemented")
+        raise NotImplementedError("MRS not implemented")
     return e, []
 
 def msr(ir, instr, a, b):
@@ -536,7 +529,7 @@ def msr(ir, instr, a, b):
         e.append(ExprAff(cf, b[29:30]))
         e.append(ExprAff(of, b[28:29]))
     else:
-        raise NotImplementedError("MRS not implemented")
+        raise NotImplementedError("MSR not implemented")
     return e, []
 
 
