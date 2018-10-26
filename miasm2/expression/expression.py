@@ -43,8 +43,17 @@ TOK_INF_EQUAL = "<="
 TOK_INF_EQUAL_SIGNED = TOK_INF_EQUAL + "s"
 TOK_INF_EQUAL_UNSIGNED = TOK_INF_EQUAL + "u"
 TOK_EQUAL = "=="
+TOK_DIFFERENT = "!="
 TOK_POS = "pos"
 TOK_POS_STRICT = "Spos"
+TOK_GREATER = ">"
+TOK_GREATER_SIGNED = TOK_GREATER + "s"
+TOK_GREATER_UNSIGNED = TOK_GREATER + "u"
+TOK_GREATER_EQUAL = ">="
+TOK_GREATER_EQUAL_SIGNED = TOK_GREATER_EQUAL + "s"
+TOK_GREATER_EQUAL_UNSIGNED = TOK_GREATER_EQUAL + "u"
+
+
 
 # Hashing constants
 EXPRINT = 1
@@ -1015,11 +1024,13 @@ class ExprOp(Expr):
                 "ucomiss_zf", "ucomiss_pf", "ucomiss_cf",
                 "ucomisd_zf", "ucomisd_pf", "ucomisd_cf"]:
             size = 1
-        elif self._op in [TOK_INF, TOK_INF_SIGNED,
+        elif self._op in [ TOK_INF, TOK_INF_SIGNED,
                            TOK_INF_UNSIGNED, TOK_INF_EQUAL,
                            TOK_INF_EQUAL_SIGNED, TOK_INF_EQUAL_UNSIGNED,
-                           TOK_EQUAL, TOK_POS,
-                           TOK_POS_STRICT,
+                           TOK_EQUAL, TOK_DIFFERENT, TOK_POS,
+                           TOK_POS_STRICT, TOK_GREATER, TOK_GREATER_SIGNED,
+                           TOK_GREATER_UNSIGNED, TOK_GREATER_EQUAL,
+                           TOK_GREATER_EQUAL_SIGNED, TOK_GREATER_EQUAL_UNSIGNED,
                           ]:
             size = 1
         elif self._op.startswith("fp_to_sint"):
@@ -1107,7 +1118,13 @@ class ExprOp(Expr):
             TOK_INF_SIGNED,
             TOK_INF_EQUAL_UNSIGNED,
             TOK_INF_EQUAL_SIGNED,
-            TOK_EQUAL
+            TOK_EQUAL,
+            TOK_DIFFERENT,
+            TOK_GREATER_UNSIGNED,
+            TOK_GREATER_SIGNED,
+            TOK_GREATER_EQUAL_UNSIGNED,
+            TOK_GREATER_EQUAL_SIGNED,
+            
         ]
 
     def is_associative(self):
