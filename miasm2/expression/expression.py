@@ -20,7 +20,7 @@
 #  - ExprInt
 #  - ExprId
 #  - ExprLoc
-#  - ExprAff
+#  - ExprAssign
 #  - ExprCond
 #  - ExprMem
 #  - ExprOp
@@ -59,7 +59,7 @@ TOK_GREATER_EQUAL_UNSIGNED = TOK_GREATER_EQUAL + "u"
 EXPRINT = 1
 EXPRID = 2
 EXPRLOC = 3
-EXPRAFF = 4
+EXPRASSIGN = 4
 EXPRCOND = 5
 EXPRMEM = 6
 EXPROP = 7
@@ -684,9 +684,9 @@ class ExprLoc(Expr):
         return True
 
 
-class ExprAff(Expr):
+class ExprAssign(Expr):
 
-    """An ExprAff represent an affection from an Expression to another one.
+    """An ExprAssign represent an affection from an Expression to another one.
 
     Some use cases:
      - var1 <- 2
@@ -695,7 +695,7 @@ class ExprAff(Expr):
     __slots__ = Expr.__slots__ + ["_dst", "_src"]
 
     def __init__(self, dst, src):
-        """Create an ExprAff for dst <- src
+        """Create an ExprAssign for dst <- src
         @dst: Expr, affectation destination
         @src: Expr, affectation source
         """
@@ -705,10 +705,10 @@ class ExprAff(Expr):
 
         if dst.size != src.size:
             raise ValueError(
-                "sanitycheck: ExprAff args must have same size! %s" %
+                "sanitycheck: ExprAssign args must have same size! %s" %
                 ([(str(arg), arg.size) for arg in [dst, src]]))
 
-        super(ExprAff, self).__init__(self.dst.size)
+        super(ExprAssign, self).__init__(self.dst.size)
 
     dst = property(lambda self: self._dst)
     src = property(lambda self: self._src)
@@ -742,7 +742,7 @@ class ExprAff(Expr):
     def get_r(self, mem_read=False, cst_read=False):
         elements = self._src.get_r(mem_read, cst_read)
         if isinstance(self._dst, ExprMem) and mem_read:
-            elements.update(self._dst.arg.get_r(mem_read, cst_read))
+            elements.update(self._dst.ptr.get_r(mem_read, cst_read))
         return elements
 
     def get_w(self):
@@ -752,7 +752,7 @@ class ExprAff(Expr):
             return self._dst.get_w()
 
     def _exprhash(self):
-        return hash((EXPRAFF, hash(self._dst), hash(self._src)))
+        return hash((EXPRASSIGN, hash(self._dst), hash(self._src)))
 
     def _exprrepr(self):
         return "%s(%r, %r)" % (self.__class__.__name__, self._dst, self._src)
@@ -768,10 +768,10 @@ class ExprAff(Expr):
         if dst == self._dst and src == self._src:
             return self
         else:
-            return ExprAff(dst, src)
+            return ExprAssign(dst, src)
 
     def copy(self):
-        return ExprAff(self._dst.copy(), self._src.copy())
+        return ExprAssign(self._dst.copy(), self._src.copy())
 
     def depth(self):
         return max(self._src.depth(), self._dst.depth()) + 1
@@ -784,6 +784,17 @@ class ExprAff(Expr):
 
     def is_aff(self):
         return True
+
+
+class ExprAff(ExprAssign):
+    """
+    DEPRECATED class.
+    Use ExprAssign instead of ExprAff
+    """
+
+    def __init__(self, dst, src):
+        warnings.warn('DEPRECATION WARNING: use ExprAssign instead of ExprAff')
+        super(ExprAff, self).__init__(dst, src)
 
 
 class ExprCond(Expr):
@@ -889,47 +900,56 @@ class ExprMem(Expr):
      - Memory write
     """
 
-    __slots__ = Expr.__slots__ + ["_arg"]
+    __slots__ = Expr.__slots__ + ["_ptr"]
 
-    def __init__(self, arg, size=None):
+    def __init__(self, ptr, size=None):
         """Create an ExprMem
-        @arg: Expr, memory access address
+        @ptr: Expr, memory access address
         @size: int, memory access size
         """
         if size is None:
-            warnings.warn('DEPRECATION WARNING: size is a mandatory argument: use ExprMem(arg, SIZE)')
+            warnings.warn('DEPRECATION WARNING: size is a mandatory argument: use ExprMem(ptr, SIZE)')
             size = 32
 
-        # arg must be Expr
-        assert isinstance(arg, Expr)
+        # ptr must be Expr
+        assert isinstance(ptr, Expr)
         assert isinstance(size, (int, long))
 
-        if not isinstance(arg, Expr):
+        if not isinstance(ptr, Expr):
             raise ValueError(
-                'ExprMem: arg must be an Expr (not %s)' % type(arg))
+                'ExprMem: ptr must be an Expr (not %s)' % type(ptr))
 
         super(ExprMem, self).__init__(size)
-        self._arg = arg
+        self._ptr = ptr
 
-    arg = property(lambda self: self._arg)
+    def get_arg(self):
+        warnings.warn('DEPRECATION WARNING: use exprmem.ptr instead of exprmem.arg')
+        return self.ptr
+
+    def set_arg(self, value):
+        warnings.warn('DEPRECATION WARNING: use exprmem.ptr instead of exprmem.arg')
+        self.ptr = value
+
+    ptr = property(lambda self: self._ptr)
+    arg = property(get_arg, set_arg)
 
     def __reduce__(self):
-        state = self._arg, self._size
+        state = self._ptr, self._size
         return self.__class__, state
 
-    def __new__(cls, arg, size=None):
+    def __new__(cls, ptr, size=None):
         if size is None:
-            warnings.warn('DEPRECATION WARNING: size is a mandatory argument: use ExprMem(arg, SIZE)')
+            warnings.warn('DEPRECATION WARNING: size is a mandatory argument: use ExprMem(ptr, SIZE)')
             size = 32
 
-        return Expr.get_object(cls, (arg, size))
+        return Expr.get_object(cls, (ptr, size))
 
     def __str__(self):
-        return "@%d[%s]" % (self.size, str(self.arg))
+        return "@%d[%s]" % (self.size, str(self.ptr))
 
     def get_r(self, mem_read=False, cst_read=False):
         if mem_read:
-            return set(self._arg.get_r(mem_read, cst_read).union(set([self])))
+            return set(self._ptr.get_r(mem_read, cst_read).union(set([self])))
         else:
             return set([self])
 
@@ -937,37 +957,37 @@ class ExprMem(Expr):
         return set([self])  # [memreg]
 
     def _exprhash(self):
-        return hash((EXPRMEM, hash(self._arg), self._size))
+        return hash((EXPRMEM, hash(self._ptr), self._size))
 
     def _exprrepr(self):
         return "%s(%r, %r)" % (self.__class__.__name__,
-                               self._arg, self._size)
+                               self._ptr, self._size)
 
     def __contains__(self, expr):
-        return self == expr or self._arg.__contains__(expr)
+        return self == expr or self._ptr.__contains__(expr)
 
     @visit_chk
     def visit(self, callback, test_visit=None):
-        arg = self._arg.visit(callback, test_visit)
-        if arg == self._arg:
+        ptr = self._ptr.visit(callback, test_visit)
+        if ptr == self._ptr:
             return self
-        return ExprMem(arg, self.size)
+        return ExprMem(ptr, self.size)
 
     def copy(self):
-        arg = self.arg.copy()
-        return ExprMem(arg, size=self.size)
+        ptr = self.ptr.copy()
+        return ExprMem(ptr, size=self.size)
 
     def is_mem_segm(self):
         """Returns True if is ExprMem and ptr is_op_segm"""
-        return self._arg.is_op_segm()
+        return self._ptr.is_op_segm()
 
     def depth(self):
-        return self._arg.depth() + 1
+        return self._ptr.depth() + 1
 
     def graph_recursive(self, graph):
         graph.add_node(self)
-        self._arg.graph_recursive(graph)
-        graph.add_uniq_edge(self, self._arg)
+        self._ptr.graph_recursive(graph)
+        graph.add_uniq_edge(self, self._ptr)
 
     def is_mem(self):
         return True
@@ -1419,9 +1439,9 @@ def compare_exprs(expr1, expr2):
         if ret:
             return ret
         return cmp(expr1.size, expr2.size)
-    elif cls1 == ExprAff:
+    elif cls1 == ExprAssign:
         raise NotImplementedError(
-            "Comparaison from an ExprAff not yet implemented")
+            "Comparaison from an ExprAssign not yet implemented")
     elif cls2 == ExprCond:
         ret = compare_exprs(expr1.cond, expr2.cond)
         if ret:
@@ -1432,7 +1452,7 @@ def compare_exprs(expr1, expr2):
         ret = compare_exprs(expr1.src2, expr2.src2)
         return ret
     elif cls1 == ExprMem:
-        ret = compare_exprs(expr1.arg, expr2.arg)
+        ret = compare_exprs(expr1.ptr, expr2.ptr)
         if ret:
             return ret
         return cmp(expr1.size, expr2.size)
@@ -1622,7 +1642,7 @@ def match_expr(expr, pattern, tks, result=None):
             return False
         if expr.size != pattern.size:
             return False
-        return match_expr(expr.arg, pattern.arg, tks, result)
+        return match_expr(expr.ptr, pattern.ptr, tks, result)
 
     elif expr.is_slice():
         if not pattern.is_slice():

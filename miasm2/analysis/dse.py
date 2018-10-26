@@ -56,7 +56,7 @@ except ImportError:
     z3 = None
 
 from miasm2.expression.expression import ExprMem, ExprInt, ExprCompose, \
-    ExprAff, ExprId, ExprLoc, LocKey
+    ExprAssign, ExprId, ExprLoc, LocKey
 from miasm2.core.bin_stream import bin_stream_vm
 from miasm2.jitter.emulatedsymbexec import EmulatedSymbExec
 from miasm2.expression.expression_helper import possible_values
@@ -105,9 +105,9 @@ class ESETrackModif(EmulatedSymbExec):
                                        # symbolize
 
     def _func_read(self, expr_mem):
-        if not expr_mem.arg.is_int():
+        if not expr_mem.ptr.is_int():
             return expr_mem
-        dst_addr = int(expr_mem.arg)
+        dst_addr = int(expr_mem.ptr)
 
         if not self.dse_memory_range:
             # Trivial case (optimization)
@@ -121,7 +121,7 @@ class ESETrackModif(EmulatedSymbExec):
                 out.append(self.dse_memory_to_expr(addr))
             else:
                 # Get concrete value
-                atomic_access = ExprMem(ExprInt(addr, expr_mem.arg.size), 8)
+                atomic_access = ExprMem(ExprInt(addr, expr_mem.ptr.size), 8)
                 out.append(super(ESETrackModif, self)._func_read(atomic_access))
 
         if len(out) == 1:
@@ -284,8 +284,8 @@ class DSEEngine(object):
                     value = getattr(self.jitter.cpu, symbol.name)
                     if value != symb_value:
                         errors.append(DriftInfo(symbol, symb_value, value))
-            elif symbol.is_mem() and symbol.arg.is_int():
-                value_chr = self.jitter.vm.get_mem(int(symbol.arg),
+            elif symbol.is_mem() and symbol.ptr.is_int():
+                value_chr = self.jitter.vm.get_mem(int(symbol.ptr),
                                                    symbol.size / 8)
                 exp_value = int(value_chr[::-1].encode("hex"), 16)
                 if exp_value != symb_value:
@@ -626,19 +626,19 @@ class DSEPathConstraint(DSEEngine):
                 target_addr = self.ir_arch.loc_db.canonize_to_exprloc(
                     possibility.value
                 )
-                path_constraint = set() # Set of ExprAff for the possible path
+                path_constraint = set() # Set of ExprAssign for the possible path
 
                 # Get constraint associated to the possible path
                 memory_to_add = ModularIntervals(symb_pc.size)
                 for cons in possibility.constraints:
                     eaff = cons.to_constraint()
                     # eaff.get_r(mem_read=True) is not enough
-                    # ExprAff consider a Memory access in dst as a write
+                    # ExprAssign consider a Memory access in dst as a write
                     mem = eaff.dst.get_r(mem_read=True)
                     mem.update(eaff.src.get_r(mem_read=True))
                     for expr in mem:
                         if expr.is_mem():
-                            addr_range = expr_range(expr.arg)
+                            addr_range = expr_range(expr.ptr)
                             # At upper bounds, add the size of the memory access
                             # if addr (- [a, b], then @size[addr] reachables
                             # values are in @8[a, b + size[
@@ -663,7 +663,7 @@ class DSEPathConstraint(DSEEngine):
                         if not value.is_int():
                             raise TypeError("Rely on a symbolic memory case, " \
                                             "address 0x%x" % address)
-                        path_constraint.add(ExprAff(expr_mem, value))
+                        path_constraint.add(ExprAssign(expr_mem, value))
 
                 if target_addr == cur_addr:
                     # Add path constraint

@@ -149,11 +149,11 @@ class TranslatorSMT2(Translator):
         return bit_vec_val(str(offset), expr.size)
 
     def from_ExprMem(self, expr):
-        addr = self.from_expr(expr.arg)
+        addr = self.from_expr(expr.ptr)
         # size to read from memory
         size = expr.size
         # size of memory address
-        addr_size = expr.arg.size
+        addr_size = expr.ptr.size
         return self._mem.get(addr, size, addr_size)
 
     def from_ExprSlice(self, expr):
@@ -278,7 +278,7 @@ class TranslatorSMT2(Translator):
 
         return res
 
-    def from_ExprAff(self, expr):
+    def from_ExprAssign(self, expr):
         src = self.from_expr(expr.src)
         dst = self.from_expr(expr.dst)
         return smt2_assert(smt2_eq(src, dst))
