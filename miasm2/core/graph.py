@@ -466,6 +466,7 @@ class DiGraph(object):
                 if successor in postdominators[node] and node != successor:
                     ipdoms[node] = successor
                     break
+        return ipdoms
 
     def compute_dominance_frontier(self, head):
         """
