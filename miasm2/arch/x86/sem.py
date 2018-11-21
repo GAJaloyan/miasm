@@ -398,7 +398,7 @@ def gen_cmov(ir, instr, cond, dst, src, mov_if):
         dstA, dstB = loc_do_expr, loc_skip_expr
     else:
         dstA, dstB = loc_skip_expr, loc_do_expr
-    e = []
+    e = [m2_expr.ExprAssign(dst, dst)]
     e_do, extra_irs = mov(ir, instr, dst, src)
     e_do.append(m2_expr.ExprAssign(ir.IRDst, loc_skip_expr))
     e.append(m2_expr.ExprAssign(ir.IRDst, m2_expr.ExprCond(cond, dstA, dstB)))
@@ -636,17 +636,16 @@ def _rotate_tpl(ir, instr, dst, src, op, left=False):
             m2_expr.ExprAssign(of, new_of),
             m2_expr.ExprAssign(dst, res)
             ]
+    e = [m2_expr.ExprAssign(dst, dst)]
     # Don't generate conditional shifter on constant
     if isinstance(shifter, m2_expr.ExprInt):
         if int(shifter) != 0:
             return (e_do, [])
         else:
-            return ([], [])
-    e = []
+            return (e, [])
     loc_do, loc_do_expr = ir.gen_loc_key_and_expr(ir.IRDst.size)
     loc_skip = ir.get_next_loc_key(instr)
     loc_skip_expr = m2_expr.ExprLoc(loc_skip, ir.IRDst.size)
-
     e_do.append(m2_expr.ExprAssign(ir.IRDst, loc_skip_expr))
     e.append(m2_expr.ExprAssign(
         ir.IRDst, m2_expr.ExprCond(shifter, loc_do_expr, loc_skip_expr)))
@@ -685,17 +684,16 @@ def rotate_with_carry_tpl(ir, instr, op, dst, src):
             m2_expr.ExprAssign(of, new_of),
             m2_expr.ExprAssign(dst, new_dst)
             ]
+    e = [m2_expr.ExprAssign(dst, dst)]
     # Don't generate conditional shifter on constant
     if isinstance(shifter, m2_expr.ExprInt):
         if int(shifter) != 0:
             return (e_do, [])
         else:
-            return ([], [])
-    e = []
+            return (e, [])
     loc_do, loc_do_expr = ir.gen_loc_key_and_expr(ir.IRDst.size)
     loc_skip = ir.get_next_loc_key(instr)
     loc_skip_expr = m2_expr.ExprLoc(loc_skip, ir.IRDst.size)
-
     e_do.append(m2_expr.ExprAssign(ir.IRDst, loc_skip_expr))
     e.append(m2_expr.ExprAssign(
         ir.IRDst, m2_expr.ExprCond(shifter, loc_do_expr, loc_skip_expr)))
@@ -737,9 +735,9 @@ def _shift_tpl(op, ir, instr, a, b, c=None, op_inv=None, left=False,
 
         # An overflow can occured, emulate the 'undefined behavior'
         # Overflow behavior if (shift / size % 2)
-        base_cond_overflow = c if left else (
-            c - m2_expr.ExprInt(1, size=c.size))
-        cond_overflow = base_cond_overflow & m2_expr.ExprInt(a.size, c.size)
+        base_cond_overflow = shifter if left else (
+            shifter - m2_expr.ExprInt(1, size=shifter.size))
+        cond_overflow = base_cond_overflow & m2_expr.ExprInt(a.size, shifter.size)
         if left:
             # Overflow occurs one round before right
             mask = m2_expr.ExprCond(cond_overflow, mask, ~mask)
@@ -752,7 +750,7 @@ def _shift_tpl(op, ir, instr, a, b, c=None, op_inv=None, left=False,
 
         # Overflow case: cf come from src (bit number shifter % size)
         cf_from_src = m2_expr.ExprOp(op, b,
-                                     (c.zeroExtend(b.size) &
+                                     (shifter.zeroExtend(b.size) &
                                       m2_expr.ExprInt(a.size - 1, b.size)) - i1)
         cf_from_src = cf_from_src.msb() if left else cf_from_src[:1]
         new_cf = m2_expr.ExprCond(cond_overflow, cf_from_src, cf_from_dst)
@@ -772,15 +770,13 @@ def _shift_tpl(op, ir, instr, a, b, c=None, op_inv=None, left=False,
         m2_expr.ExprAssign(a, res),
     ]
     e_do += update_flag_znp(res)
-
+    e = [m2_expr.ExprAssign(a, a)]
     # Don't generate conditional shifter on constant
     if isinstance(shifter, m2_expr.ExprInt):
         if int(shifter) != 0:
-            return e_do, []
+            return (e_do, [])
         else:
-            return [], []
-
-    e = []
+            return (e, [])
     loc_do, loc_do_expr = ir.gen_loc_key_and_expr(ir.IRDst.size)
     loc_skip = ir.get_next_loc_key(instr)
     loc_skip_expr = m2_expr.ExprLoc(loc_skip, ir.IRDst.size)
@@ -5650,7 +5646,6 @@ class ir_x86_16(IntermediateRepresentation):
 
         instr_ir, extra_ir = mnemo_func[
             instr.name.lower()](self, instr, *args)
-
         self.mod_pc(instr, instr_ir, extra_ir)
         instr.additional_info.except_on_instr = False
         if instr.additional_info.g1.value & 6 == 0 or \

@@ -308,6 +308,12 @@ def simp_cst_propagation(e_s, expr):
             return -ExprOp(op_name, *new_args)
         args = new_args
 
+    # -(a * b * int) => a * b * (-int)
+    if op_name == "-" and args[0].is_op('*') and args[0].args[-1].is_int():
+        args = args[0].args
+        return ExprOp('*', *(list(args[:-1]) + [ExprInt(-int(args[-1]), expr.size)]))
+
+
     # A << int with A ExprCompose => move index
     if (op_name == "<<" and args[0].is_compose() and
         args[1].is_int() and int(args[1]) != 0):
@@ -884,35 +890,34 @@ def simp_cond_flag(expr_simp, expr):
     return expr
 
 
-def simp_cond_int(expr_simp, expr):
-    if (expr.cond.is_op(TOK_EQUAL) and
-          expr.cond.args[1].is_int() and
-          expr.cond.args[0].is_compose() and
-          len(expr.cond.args[0].args) == 2 and
-          expr.cond.args[0].args[1].is_int(0)):
+def simp_cmp_int(expr_simp, expr):
+    # ({X, 0} == int) => X == int[:]
+    # X + int1 == int2 => X == int2-int1
+    if (expr.is_op(TOK_EQUAL) and
+          expr.args[1].is_int() and
+          expr.args[0].is_compose() and
+          len(expr.args[0].args) == 2 and
+          expr.args[0].args[1].is_int(0)):
         # ({X, 0} == int) => X == int[:]
-        src = expr.cond.args[0].args[0]
-        int_val = int(expr.cond.args[1])
+        src = expr.args[0].args[0]
+        int_val = int(expr.args[1])
         new_int = ExprInt(int_val, src.size)
         expr = expr_simp(
-            ExprCond(
-                ExprOp(TOK_EQUAL, src, new_int),
-                expr.src1,
-                expr.src2)
+            ExprOp(TOK_EQUAL, src, new_int)
         )
-    elif (expr.cond.is_op() and
-          expr.cond.op in [
+    elif (expr.is_op() and
+          expr.op in [
               TOK_EQUAL,
-              TOK_INF_SIGNED,
-              TOK_INF_EQUAL_SIGNED,
-              TOK_INF_UNSIGNED,
-              TOK_INF_EQUAL_UNSIGNED
           ] and
-          expr.cond.args[1].is_int() and
-          expr.cond.args[0].is_op("+") and
-          expr.cond.args[0].args[-1].is_int()):
+          expr.args[1].is_int() and
+          expr.args[0].is_op("+") and
+          expr.args[0].args[-1].is_int()):
         # X + int1 == int2 => X == int2-int1
-        left, right = expr.cond.args
+        # WARNING:
+        # X - 0x10 <=u 0x20 gives X in [0x10 0x30]
+        # which is not equivalet to A <=u 0x10
+
+        left, right = expr.args
         left, int_diff = left.args[:-1], left.args[-1]
         if len(left) == 1:
             left = left[0]
@@ -920,10 +925,7 @@ def simp_cond_int(expr_simp, expr):
             left = ExprOp('+', *left)
         new_int = expr_simp(right - int_diff)
         expr = expr_simp(
-            ExprCond(
-                ExprOp(expr.cond.op, left, new_int),
-                expr.src1,
-                expr.src2)
+            ExprOp(expr.op, left, new_int),
         )
     return expr
 
@@ -1047,6 +1049,20 @@ def simp_zeroext_eq_cst(expr_s, expr):
         return ExprInt(0, 1)
     return ExprOp(TOK_EQUAL, src, ExprInt(int(arg2), src.size))
 
+def simp_ext_eq_ext(expr_s, expr):
+    # A.zeroExt(X) == B.zeroExt(X) => A == B
+    # A.signExt(X) == B.signExt(X) => A == B
+    if not expr.is_op(TOK_EQUAL):
+        return expr
+    arg1, arg2 = expr.args
+    if (not ((arg1.is_op() and arg1.op.startswith("zeroExt") and
+              arg2.is_op() and arg2.op.startswith("zeroExt")) or
+             (arg1.is_op() and arg1.op.startswith("signExt") and
+               arg2.is_op() and arg2.op.startswith("signExt")))):
+        return expr
+    if arg1.args[0].size != arg2.args[0].size:
+        return expr
+    return ExprOp(TOK_EQUAL, arg1.args[0], arg2.args[0])
 
 def simp_cond_eq_zero(expr_s, expr):
     # (X == 0)?(A:B) => X?(B:A)
@@ -1058,3 +1074,142 @@ def simp_cond_eq_zero(expr_s, expr):
         return expr
     new_expr = ExprCond(arg1, expr.src2, expr.src1)
     return new_expr
+
+
+def simp_cmp_int_int(expr_s, expr):
+    # IntA <s IntB => int
+    # IntA <u IntB => int
+    # IntA <=s IntB => int
+    # IntA <=u IntB => int
+    # IntA == IntB => int
+    if expr.op not in [
+            TOK_EQUAL,
+            TOK_INF_SIGNED, TOK_INF_UNSIGNED,
+            TOK_INF_EQUAL_SIGNED, TOK_INF_EQUAL_UNSIGNED,
+    ]:
+        return expr
+    if not all(arg.is_int() for arg in expr.args):
+        return expr
+    int_a, int_b = expr.args
+    if expr.is_op(TOK_EQUAL):
+        if int_a == int_b:
+            return ExprInt(1, 1)
+        else:
+            return ExprInt(0, 1)
+
+    if expr.op in [TOK_INF_SIGNED, TOK_INF_EQUAL_SIGNED]:
+        int_a = int(mod_size2int[int_a.size](int(int_a)))
+        int_b = int(mod_size2int[int_b.size](int(int_b)))
+    else:
+        int_a = int(mod_size2uint[int_a.size](int(int_a)))
+        int_b = int(mod_size2uint[int_b.size](int(int_b)))
+
+    if expr.op in [TOK_INF_SIGNED, TOK_INF_UNSIGNED]:
+        ret = int_a < int_b
+    else:
+        ret = int_a <= int_b
+
+    if ret:
+        ret = 1
+    else:
+        ret = 0
+    return ExprInt(ret, 1)
+
+
+def simp_ext_cst(expr_s, expr):
+    # Int.zeroExt(X) => Int
+    # Int.signExt(X) => Int
+    if not (expr.op.startswith("zeroExt") or expr.op.startswith("signExt")):
+        return expr
+    arg = expr.args[0]
+    if not arg.is_int():
+        return expr
+    if expr.op.startswith("zeroExt"):
+        ret = int(arg)
+    else:
+        ret = int(mod_size2int[arg.size](int(arg)))
+    ret = ExprInt(ret, expr.size)
+    return ret
+
+
+def simp_slice_of_ext(expr_s, expr):
+    # zeroExt(X)[0:size(X)] => X
+    if expr.start != 0:
+        return expr
+    if not expr.arg.is_op():
+        return expr
+    if not expr.arg.op.startswith("zeroExt"):
+        return expr
+    arg = expr.arg.args[0]
+    if arg.size != expr.size:
+        return expr
+    return arg
+
+def simp_add_multiple(expr_s, expr):
+    # X + X => 2 * X
+    # X + X * int1 => X * (1 + int1)
+    # X * int1 + (- X) => X * (int1 - 1)
+    # X + (X << int1) => X * (1 + 2 ** int1)
+    # Correct even if addition overflow/underflow
+    if not expr.is_op('+'):
+        return expr
+
+    # Extract each argument and its counter
+    operands = {}
+    for i, arg in enumerate(expr.args):
+        if arg.is_op('*') and arg.args[1].is_int():
+            base_expr, factor = arg.args
+            operands[base_expr] = operands.get(base_expr, 0) + int(factor)
+        elif arg.is_op('<<') and arg.args[1].is_int():
+            base_expr, factor = arg.args
+            operands[base_expr] = operands.get(base_expr, 0) + 2 ** int(factor)
+        elif arg.is_op("-"):
+            arg = arg.args[0]
+            if arg.is_op('<<') and arg.args[1].is_int():
+                base_expr, factor = arg.args
+                operands[base_expr] = operands.get(base_expr, 0) - (2 ** int(factor))
+            else:
+                operands[arg] = operands.get(arg, 0) - 1
+        else:
+            operands[arg] = operands.get(arg, 0) + 1
+    out = []
+
+    # Best effort to factor common args:
+    # (a + b) * 3 + a + b => (a + b) * 4
+    # Does not factor:
+    # (a + b) * 3 + 2 * a + b => (a + b) * 4 + a
+    modified = True
+    while modified:
+        modified = False
+        for arg, count in operands.iteritems():
+            if not arg.is_op('+'):
+                continue
+            components = arg.args
+            if not all(component in operands for component in components):
+                continue
+            counters = set(operands[component] for component in components)
+            if len(counters) != 1:
+                continue
+            counter = counters.pop()
+            for component in components:
+                del operands[component]
+            operands[arg] += counter
+            modified = True
+            break
+
+    for arg, count in operands.iteritems():
+        if count == 0:
+            continue
+        if count == 1:
+            out.append(arg)
+            continue
+        out.append(arg * ExprInt(count, expr.size))
+
+    if len(out) == len(expr.args):
+        # No reductions
+        return expr
+    if not out:
+        return ExprInt(0, expr.size)
+    if len(out) == 1:
+        return out[0]
+    return ExprOp('+', *out)

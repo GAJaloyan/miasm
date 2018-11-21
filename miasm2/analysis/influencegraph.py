@@ -281,5 +281,6 @@ class InfluenceGraph(DependencyGraph):
             #                state.pending[self._ircfg.IRDst] = set()
 
             # Propagate state to children
-            for succ in self._ircfg.successors_iter(state.loc_key):
-                todo.add(state.extend(succ))
+            if state.loc_key not in tails:
+                for succ in self._ircfg.successors_iter(state.loc_key):
+                    todo.add(state.extend(succ))

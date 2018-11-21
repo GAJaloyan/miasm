@@ -97,6 +97,10 @@ s = a[:8]
 i0 = ExprInt(0, 32)
 i1 = ExprInt(1, 32)
 i2 = ExprInt(2, 32)
+i3 = ExprInt(3, 32)
+im1 = ExprInt(-1, 32)
+im2 = ExprInt(-2, 32)
+
 icustom = ExprInt(0x12345678, 32)
 cc = ExprCond(a, b, c)
 
@@ -241,7 +245,7 @@ to_test = [(ExprInt(1, 32) - ExprInt(1, 32), ExprInt(0, 32)),
     (ExprOp('*', -a, -b, c, ExprInt(0x12, 32)),
      ExprOp('*', a, b, c, ExprInt(0x12, 32))),
     (ExprOp('*', -a, -b, -c, ExprInt(0x12, 32)),
-     - ExprOp('*', a, b, c, ExprInt(0x12, 32))),
+     ExprOp('*', a, b, c, ExprInt(-0x12, 32))),
     (a | ExprInt(0xffffffff, 32),
      ExprInt(0xffffffff, 32)),
     (ExprCond(a, ExprInt(1, 32), ExprInt(2, 32)) * ExprInt(4, 32),
@@ -442,6 +446,21 @@ to_test = [(ExprInt(1, 32) - ExprInt(1, 32), ExprInt(0, 32)),
     (ExprOp("signExt_16", ExprInt(0x8, 8)), ExprInt(0x8, 16)),
     (ExprOp("signExt_16", ExprInt(-0x8, 8)), ExprInt(-0x8, 16)),
 
+    (- (i2*a), a * im2),
+    (a + a, a * i2),
+    (ExprOp('+', a, a), a * i2),
+    (ExprOp('+', a, a, a), a * i3),
+    ((a<<i1) - a, a),
+    ((a<<i1) - (a<<i2), a*im2),
+    ((a<<i1) - a - a, i0),
+    ((a<<i2) - (a<<i1) - (a<<i1), i0),
+    ((a<<i2) - a*i3, a),
+    (((a+b) * i3) - (a + b), (a+b) * i2),
+    (((a+b) * i2) + a + b, (a+b) * i3),
+    (((a+b) * i3) - a - b, (a+b) * i2),
+    (((a+b) * i2) - a - b, a+b),
+    (((a+b) * i2) - i2 * a - i2 * b, i0),
+
 
 ]
 
@@ -452,8 +471,64 @@ for e_input, e_check in to_test:
     rez = e_new == e_check
     if not rez:
         raise ValueError(
-            'bug in expr_simp_explicit simp(%s) is %s and should be %s' % (e_input, e_new, e_check))
+            'bug in expr_simp_explicit simp(%s) is %s and should be %s' % (e_input, e_new, e_check)
+        )
     check(e_input, e_check)
+
+
+# Test high level op
+to_test = [
+    (ExprOp(TOK_EQUAL, a+i2, i1), ExprOp(TOK_EQUAL, a+i1, i0)),
+    (ExprOp(TOK_INF_SIGNED, a+i2, i1), ExprOp(TOK_INF_SIGNED, a+i2, i1)),
+    (ExprOp(TOK_INF_UNSIGNED, a+i2, i1), ExprOp(TOK_INF_UNSIGNED, a+i2, i1)),
+
+    (
+        ExprOp(TOK_EQUAL, ExprCompose(a8, ExprInt(0, 24)), im1),
+        ExprOp(TOK_EQUAL, a8, ExprInt(0xFF, 8))
+    ),
+
+    (ExprOp(TOK_INF_SIGNED, i1, i2), ExprInt(1, 1)),
+    (ExprOp(TOK_INF_UNSIGNED, i1, i2), ExprInt(1, 1)),
+    (ExprOp(TOK_INF_EQUAL_SIGNED, i1, i2), ExprInt(1, 1)),
+    (ExprOp(TOK_INF_EQUAL_UNSIGNED, i1, i2), ExprInt(1, 1)),
+
+    (ExprOp(TOK_INF_SIGNED, i2, i1), ExprInt(0, 1)),
+    (ExprOp(TOK_INF_UNSIGNED, i2, i1), ExprInt(0, 1)),
+    (ExprOp(TOK_INF_EQUAL_SIGNED, i2, i1), ExprInt(0, 1)),
+    (ExprOp(TOK_INF_EQUAL_UNSIGNED, i2, i1), ExprInt(0, 1)),
+
+    (ExprOp(TOK_INF_SIGNED, i1, i1), ExprInt(0, 1)),
+    (ExprOp(TOK_INF_UNSIGNED, i1, i1), ExprInt(0, 1)),
+    (ExprOp(TOK_INF_EQUAL_SIGNED, i1, i1), ExprInt(1, 1)),
+    (ExprOp(TOK_INF_EQUAL_UNSIGNED, i1, i1), ExprInt(1, 1)),
+
+
+    (ExprOp(TOK_INF_SIGNED, im1, i1), ExprInt(1, 1)),
+    (ExprOp(TOK_INF_UNSIGNED, im1, i1), ExprInt(0, 1)),
+    (ExprOp(TOK_INF_EQUAL_SIGNED, im1, i1), ExprInt(1, 1)),
+    (ExprOp(TOK_INF_EQUAL_UNSIGNED, im1, i1), ExprInt(0, 1)),
+
+    (ExprOp(TOK_INF_SIGNED, i1, im1), ExprInt(0, 1)),
+    (ExprOp(TOK_INF_UNSIGNED, i1, im1), ExprInt(1, 1)),
+    (ExprOp(TOK_INF_EQUAL_SIGNED, i1, im1), ExprInt(0, 1)),
+    (ExprOp(TOK_INF_EQUAL_UNSIGNED, i1, im1), ExprInt(1, 1)),
+
+    (ExprOp(TOK_EQUAL, a8.zeroExtend(32), b8.zeroExtend(32)), ExprOp(TOK_EQUAL, a8, b8)),
+    (ExprOp(TOK_EQUAL, a8.signExtend(32), b8.signExtend(32)), ExprOp(TOK_EQUAL, a8, b8)),
+
+]
+
+for e_input, e_check in to_test:
+    print "#" * 80
+    e_check = expr_simp(e_check)
+    e_new = expr_simp(e_input)
+    print "original: ", str(e_input), "new: ", str(e_new)
+    rez = e_new == e_check
+    if not rez:
+        raise ValueError(
+            'bug in expr_simp simp(%s) is %s and should be %s' % (e_input, e_new, e_check)
+        )
+
 
 # Test conds
 
@@ -490,7 +565,9 @@ for e_input, e_check in to_test:
     rez = e_new == e_check
     if not rez:
         raise ValueError(
-            'bug in expr_simp simp(%s) is %s and should be %s' % (e_input, e_new, e_check))
+            'bug in expr_simp simp(%s) is %s and should be %s' % (e_input, e_new, e_check)
+        )
+
 
 if args.z3:
     # This check is done on 32 bits, but the size is not use by Miasm formulas, so
